@@ -1,0 +1,15 @@
+*.zip
+
+# Binarios compilados
+A/nbody
+B/center
+C/main
+Testes/matmul
+
+# Objetos
+*.o
+*.obj
+
+# Outputs de simulacao
+*.out
+A/output
