@@ -4,104 +4,124 @@
 #include <math.h>
 #include <cuda_runtime.h>
 
-#define N_ITER 10 // number of simulation iterations
-#define DT 0.01f // time step
+#define N_ITER 10       // number of simulation iterations
+#define DT 0.01f        // time step
 #define SOFTENING 1e-9f // to avoid zero divisors
 
-
-typedef struct { float x, y, z, vx, vy, vz; } Body;
+typedef struct{
+    float x, y, z, vx, vy, vz;
+} Body;
 
 __global__ void update_positions(Body *p, float dt, int n){
     int jump = blockDim.x * gridDim.x;
     int index = threadIdx.x + blockDim.x * blockIdx.x;
 
-    for (int i = index; i < n; i += jump) {
-      p[i].x += dt * p[i].vx;
-      p[i].y += dt * p[i].vy;
-      p[i].z += dt * p[i].vz;
+    for (int i = index; i < n; i += jump)
+    {
+        p[i].x += dt * p[i].vx;
+        p[i].y += dt * p[i].vy;
+        p[i].z += dt * p[i].vz;
     }
-
 }
 
 __global__ void update_velocities(Body *p, float dt, int n){
-    // cada thread sera responsavel por atualizar um numero fixo de particulas
-
-    // cada thread atualiza particulas pulando de jump em jump na lista de particulas
-    int jump = blockDim.x * gridDim.x;
+    __shared__ Body shared_p[256];
+    // achatamos os indices para atribuir um por body
     int index = threadIdx.x + blockDim.x * blockIdx.x;
 
-    for (int i = index; i < n; i += jump) {
-      float fx = 0.0f, fy = 0.0f, fz = 0.0f;
-      for (int j = 0; j < n; j++) {
+    float fx = 0.0f, fy = 0.0f, fz = 0.0f;
+    Body my = (index < n) ? p[index] : (Body){0, 0, 0, 0, 0, 0};
+    int n_tiles = (n + 256 - 1) / 256;
 
-        float dx, dy, dz;
-        dx = p[j].x - p[i].x;
-        dy = p[j].y - p[i].y;
-        dz = p[j].z - p[i].z;
+    for (int t = 0; t < n_tiles; ++t){
 
-        float sqrd_dist = dx*dx + dy*dy + dz*dz + SOFTENING;
-        float inv_dist = 1.0 / sqrt((double)sqrd_dist);
-        float inv_dist3 = inv_dist * inv_dist * inv_dist;
+        // copiamos pra memoria local do bloco (shared_p eh o cache)
+        int j_global = t * 256 + threadIdx.x;
+        if (j_global < n){
+            shared_p[threadIdx.x] = p[j_global];
+        }
 
-        fx += dx * inv_dist3;
-        fy += dy * inv_dist3;
-        fz += dz * inv_dist3;
-      }
+        // sincronizamos para acabar de popular o cache
+        __syncthreads();
+        for (int j = 0; j < 256 && t*256+j < n; j++){
+            float dx,dy,dz;
+            dx = shared_p[j].x - my.x;
+            dy = shared_p[j].y - my.y;
+            dz = shared_p[j].z - my.z;
 
-      p[i].vx += dt*fx;
-      p[i].vy += dt*fy;
-      p[i].vz += dt*fz;
+            float sqrd_dist = dx*dx + dy*dy + dz*dz + SOFTENING;
+            float inv_dist = 1.0 / sqrt((double)sqrd_dist);
+            float inv_dist3 = inv_dist * inv_dist * inv_dist;
+            
+            fx += dx * inv_dist3;
+            fy += dy * inv_dist3;
+            fz += dz * inv_dist3;
+        }
+        // preciso esperar para nao sobrescrever o cache
+        __syncthreads();
 
+        if (index < n) {
+            p[index].vx += dt * fx;
+            p[index].vy += dt * fy;
+            p[index].vz += dt * fz;
+        }
     }
 }
 
-Body* read_dataset(int *nbodies) {
-  int b = fread(nbodies, sizeof(*nbodies), 1, stdin);
-  if (b != 1) {
-    fprintf(stderr,"\nError reading nbodie value\n");
-    exit(EXIT_FAILURE);
-  }
-  Body *bodies = (Body *)malloc(*nbodies * sizeof(Body));
-  b = fread(bodies, *nbodies * sizeof(Body), 1, stdin);
-  if (b != 1) {
-    fprintf(stderr,"\nError reading input values\n");
-    exit(EXIT_FAILURE);
-  }
+Body *read_dataset(int *nbodies)
+{
+    int b = fread(nbodies, sizeof(*nbodies), 1, stdin);
+    if (b != 1)
+    {
+        fprintf(stderr, "\nError reading nbodie value\n");
+        exit(EXIT_FAILURE);
+    }
+    Body *bodies = (Body *)malloc(*nbodies * sizeof(Body));
+    b = fread(bodies, *nbodies * sizeof(Body), 1, stdin);
+    if (b != 1)
+    {
+        fprintf(stderr, "\nError reading input values\n");
+        exit(EXIT_FAILURE);
+    }
 
-  return bodies;
+    return bodies;
 }
 
-void write_dataset(const int nbodies, Body *bodies) {
-  int b = fwrite(bodies, nbodies * sizeof(Body), 1, stdout);
-  if (b != 1) {
-    fprintf(stderr,"\nError writing to output\n");
-    exit(EXIT_FAILURE);
-  }
+void write_dataset(const int nbodies, Body *bodies)
+{
+    int b = fwrite(bodies, nbodies * sizeof(Body), 1, stdout);
+    if (b != 1)
+    {
+        fprintf(stderr, "\nError writing to output\n");
+        exit(EXIT_FAILURE);
+    }
 }
 
-int main(int argc, char **argv) {
-  int nbodies;
-  Body *h_bodies = read_dataset(&nbodies);
+int main(int argc, char **argv)
+{
+    int nbodies;
+    Body *h_bodies = read_dataset(&nbodies);
 
-  size_t bytes = nbodies * sizeof(Body);
+    size_t bytes = nbodies * sizeof(Body);
 
-  Body *d_bodies;
-  cudaMalloc(&d_bodies, bytes);
-  cudaMemcpy(d_bodies, h_bodies, bytes, cudaMemcpyHostToDevice);
+    Body *d_bodies;
+    cudaMalloc(&d_bodies, bytes);
+    cudaMemcpy(d_bodies, h_bodies, bytes, cudaMemcpyHostToDevice);
 
-  int block_size = 256;
-  int grid_size = (nbodies + block_size - 1) / block_size;
+    int block_size = 256;
+    int grid_size = (nbodies + block_size - 1) / block_size;
 
-  for (int iter = 0; iter < N_ITER; iter++) {
-    update_velocities<<<grid_size, block_size>>>(d_bodies, DT, nbodies);
-    update_positions<<<grid_size, block_size>>>(d_bodies, DT, nbodies);
-  }
+    for (int iter = 0; iter < N_ITER; iter++)
+    {
+        update_velocities<<<grid_size, block_size>>>(d_bodies, DT, nbodies);
+        update_positions<<<grid_size, block_size>>>(d_bodies, DT, nbodies);
+    }
 
-  cudaMemcpy(h_bodies, d_bodies, bytes, cudaMemcpyDeviceToHost);
-  cudaFree(d_bodies);
+    cudaMemcpy(h_bodies, d_bodies, bytes, cudaMemcpyDeviceToHost);
+    cudaFree(d_bodies);
 
-  write_dataset(nbodies, h_bodies);
-  free(h_bodies);
+    write_dataset(nbodies, h_bodies);
+    free(h_bodies);
 
-  return 0;
+    return 0;
 }
