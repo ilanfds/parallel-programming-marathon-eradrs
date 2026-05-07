@@ -123,13 +123,11 @@ int find_center(Tree *t){
 
     free(curr_leaves);
 
-    int ans=-1;
-    #pragma omp parallel for
     for(int v = 0 ; v < t->num_vertices ;++v){
-        if(!t->unactive[v]) ans = v;
+        if(!t->unactive[v]) return v+1;
     }
 
-    return ans+1;
+    return -1;
 }
 
 int main(int argc, const char * argv[]){
