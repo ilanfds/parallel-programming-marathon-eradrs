@@ -77,42 +77,52 @@ void read_input(Tree *t){
 }
 
 int find_center(Tree *t){
-#define ENQUEUE(x) do{ \
-    queue[tail++] = (x); \
-} while(0)
-#define DEQUEUE() (queue[head++])
-    
     // A ideia aqui eh tirar os vertices folhas (vertices de grau 1)
     // ate que sobre 1 ou 2 vertices (enunciado garante que sempre sobrara
     // apenas 1).
-    int* queue = (int*) malloc((t->num_vertices+1)*sizeof(int));
-    int head=0, tail=0;
-    for(int v = 0; v < t->num_vertices ; ++v){
-        if(t->degrees[v] == 1){
-            ENQUEUE(v);
+    int* curr_leaves = (int*) malloc((t->num_vertices+1)*sizeof(int));
+    int num_leaves;
+
+    int remainder = t->num_vertices;
+
+    while(remainder > 2){
+        num_leaves = 0;
+
+        // coloca todas as folhas no buffer
+        #pragma omp parallel for
+        for(int v = 0 ; v < t->num_vertices ; ++v){
+            if(!t->unactive && t->degrees[v] == 1){
+                int idx;
+                #pragma omp atomic capture
+                idx = num_leaves++;
+                curr_leaves[idx] = v;
+            }
         }
+
+        // remover as folhas e att os graus
+        #pragma omp parallel for
+        for(int i = 0 ; i < num_leaves ;++i){
+            int v =  curr_leaves[i];
+            t->unactive[v] = true;
+
+            int start = t->offset[v];
+            int end   = t->offset[v+1];
+            // itera nos vizinhos
+            for(int j = start ; j < end ; ++j){
+                int u = t->neighbors[j];
+                
+                if(t->unactive[u]) continue;
+                
+                #pragma omp atomic
+                t->degrees[u]--;
+            }
+        }
+
+        remainder -= num_leaves;
     }
 
-    int curr_num_vertices = t->num_vertices;
-
-    while(curr_num_vertices > 2){
-        int v = DEQUEUE();
-        if(t->unactive[v]) continue;
-        t->unactive[v] = true;
-        curr_num_vertices--;
-
-        // iterando pelos vizinhos de v
-        #pragma omp parallel for 
-        for(int offset = t->offset[v]; offset < t->offset[v+1] ;++offset){
-            int u = t->neighbors[offset];
-            // if(t->unactive[u]) continue; 
-            // eu pode pular os inativos
-            // mas no nosso caso nao vai fazer diferenca
-            t->degrees[u] --;
-            if(t->degrees[u] == 1) ENQUEUE(u);
-        }
-    }
-
+    free(curr_leaves);
+    
     int ans=-1;
     #pragma omp parallel for
     for(int v = 0 ; v < t->num_vertices ;++v){
@@ -120,9 +130,6 @@ int find_center(Tree *t){
     }
 
     return ans+1;
-
-#undef ENQUEUE
-#undef DEQUEUE
 }
 
 int main(int argc, const char * argv[]){
