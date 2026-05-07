@@ -59,12 +59,12 @@ __global__ void update_velocities(Body *p, float dt, int n){
         }
         // preciso esperar para nao sobrescrever o cache
         __syncthreads();
+    }
 
-        if (index < n) {
-            p[index].vx += dt * fx;
-            p[index].vy += dt * fy;
-            p[index].vz += dt * fz;
-        }
+    if (index < n) {
+        p[index].vx += dt * fx;
+        p[index].vy += dt * fy;
+        p[index].vz += dt * fz;
     }
 }
 
