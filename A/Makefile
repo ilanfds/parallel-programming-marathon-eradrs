@@ -4,10 +4,10 @@ CC=nvcc
 FLAGS=-O3 -arch=sm_70 --fmad=false
 
 # Files to compile
-SRC=a.cu
+SRC=nbody.cu
 
 # Executable name
-EXE=a
+EXE=nbody
 
 
 all: $(SRC)
