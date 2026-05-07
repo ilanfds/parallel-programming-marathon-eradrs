@@ -10,42 +10,48 @@
 
 typedef struct { float x, y, z, vx, vy, vz; } Body;
 
-__device__  void update_positions(Body *p, float dt, int n){
+__global__  void update_positions(Body *p, float dt, int n){
+    int jump = blockDim.x * gridDim.x; 
+    int index = threadIdx.x + blockDim.x * blockIdx.x
 
-}
-__device__ void update_velocities(Body *p, float dt, int n){
-
-}
-
-__global__ void step(Body *p, float dt, int n){
-    // cada thread sera responsavel por atualizar exatamente 1 particula
-
-    threadIdx.x
-}
-
-void body_force(Body *p, float dt, int n) {
-  for (int i = 0; i < n; ++i) {
-    float fx = 0.0f; 
-    float fy = 0.0f; 
-    float fz = 0.0f;
-
-    for (int j = 0; j < n; j++) {
-      float dx = p[j].x - p[i].x;
-      float dy = p[j].y - p[i].y;
-      float dz = p[j].z - p[i].z;
-      float sqrd_dist = dx*dx + dy*dy + dz*dz + SOFTENING;
-      float inv_dist = 1 / sqrt(sqrd_dist);
-      float inv_dist3 = inv_dist * inv_dist * inv_dist;
-
-      fx += dx * inv_dist3; 
-      fy += dy * inv_dist3; 
-      fz += dz * inv_dist3;
+    for (int i = index; i < n; i += jump) {
+      p[i].x += dt * p[i].vx;
+      p[i].y += dt * p[i].vy;
+      p[i].z += dt * p[i].vz;
     }
 
-    p[i].vx += dt*fx; 
-    p[i].vy += dt*fy; 
-    p[i].vz += dt*fz;
-  }
+}
+
+__global__ void update_velocities(Body *p, float dt, int n){
+    // cada thread sera responsavel por atualizar um numero fixo de particulas 
+
+    // cada thread atualiza particulas pulando de jump em jump na lista de particulas
+    int jump = blockDim.x * gridDim.x; 
+    int index = threadIdx.x + blockDim.x * blockIdx.x
+
+    for (int i = index; i < n; i += jump) {
+      float fx = 0.0f, fy = 0.0f, fz = 0.0f;
+      for (int j = 0; j < n; j++) {
+
+        float dx, dy, dz;
+        dx = p[j].x - p[i].x;
+        dy = p[j].y - p[i].y;
+        dz = p[j].z - p[i].z;
+
+        float sqrd_dist = dx*dx + dy*dy + dz*dz + SOFTENING;
+        float inv_dist = 1 / sqrt(sqrd_dist);
+        float inv_dist3 = inv_dist * inv_dist * inv_dist;
+
+        fx += dx * inv_dist3;
+        fy += dy * inv_dist3;
+        fz += dz * inv_dist3;
+      }
+
+      p[i].vx += dt*fx; 
+      p[i].vy += dt*fy; 
+      p[i].vz += dt*fz;
+
+    }
 }
 
 Body* read_dataset(int *nbodies) {
