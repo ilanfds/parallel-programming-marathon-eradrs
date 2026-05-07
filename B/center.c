@@ -1,125 +1,138 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
+#include <omp.h>
 
-#define FILE_POINTER stdin
+/*
+estruturas de dados:
 
-typedef struct { 
-	int n;
-	int **adj_matrix;
-	int *visited;
-} Tree_t;
+vetor de adjacencias, eh um vetor de vetores, onde cada elemento e a adjacencia
+daquele vertice
+_ 
+1 -> null
+2 -> [3,9]
+3 -> [1,2,4]
+4 -> [3]
+...
+_
 
+1 2 3 4 5
 
+*/
 
-Tree_t *read_edges(FILE *fp) { 
-	int a, b, n, i, j;
-	int **adj_matrix, *visited;
-	Tree_t *tree;
+// vamos usar uma CSR
+typedef struct{
+    int num_vertices;
+    int*  offset;
+    int*  neighbors;
+    int*  degrees;
+    bool* unactive;
+} Tree;
 
-	tree = (Tree_t *)malloc(sizeof(Tree_t));
-
-	fscanf(fp, "%d", &n);
-	adj_matrix = (int **)malloc(sizeof(int *)*n);
-	visited = (int *)malloc(sizeof(int)*n);
-	for (i = 0; i < n; i++) {
-		visited[i] = 0;
-		adj_matrix[i] = (int *)malloc(sizeof(int)*n);
-
-	}
-	for (i = 0; i < n; i++)
-		for (j = 0; j < n; j++)
-			adj_matrix[i][j] = 0;
-	
-	fscanf(fp, "%d %d", &a, &b);
-	while (!feof(fp)) {
-		adj_matrix[a-1][b-1] = 1; //inputs start with 1
-		adj_matrix[b-1][a-1] = 1; //replicate adjancency the other direction
-
-
-		fscanf(fp, "%d %d", &a, &b);
-
-
-	}
-
-	tree->n = n;
-	tree->adj_matrix = adj_matrix;
-	tree->visited = visited;
-	return(tree);
-
+void init_tree(Tree *t,int num_vertices){
+    int num_arestas = num_vertices-1;
+    t->num_vertices = num_vertices;
+    t->offset    = (int* )calloc(num_vertices+1,sizeof(int) );
+    t->neighbors = (int* )calloc(2*num_arestas,sizeof(int) ); // bidirecional
+    t->degrees   = (int* )calloc(num_vertices,sizeof(int) );
+    t->unactive  = (bool*)malloc(num_vertices*sizeof(bool));
+    #pragma omp parallel for
+    for(int i = 0; i < num_vertices; ++i)
+        t->unactive[i] = false;
 }
 
-void print_visited(Tree_t *tree) {
-	int i;
-	for (i = 0; i < tree->n; i++)
-		printf("%d: %d ", i+1, tree->visited[i]);
-	printf("\n");
+void read_input(Tree *t){
+    int a,b;
+    int* src = (int*)calloc(t->num_vertices-1,sizeof(int));
+    int* dst = (int*)calloc(t->num_vertices-1,sizeof(int));
+    {
+        int idx = 0;
+        for(;;){
+            if(fscanf(stdin, "%d %d", &a, &b)!=2) break;
+            a--; b--; // precisamos de 0-indexed
+            src[idx] = a;
+            dst[idx] = b;
+            idx++;
+            t->degrees[a] ++;
+            t->degrees[b] ++;
+        }
+    }
+    t->offset[0] = 0;
+    for(int v = 1 ; v < t->num_vertices + 1 ; ++v){
+        t->offset[v] = t->offset[v-1] + t->degrees[v-1];
+    }
 
-} 
-int max_distance(Tree_t *tree, int *queue) {
-	int n, last, first, max_level, i, x;
-
-	last = 1;
-	first = 0;
-	n = tree->n;
-	max_level = 0;
-	for (i = 0; i < n; i++)
-		tree->visited[i] = 0;
-	tree->visited[queue[0]] = 1;
-	while (first < n) {
-		x = queue[first++];
-		for (i = 0; i < n; i++) {
-			if (tree->adj_matrix[x][i] && !tree->visited[i]) {
-				queue[last++] = i;
-				tree->visited[i] = tree->visited[x] + 1;
-
-			}
-		}
-
-	}
-	
-	for (i = 0; i < n; i++) {
-		if (tree->visited[i] > max_level)
-			max_level = tree->visited[i];	
-	}
-	return(max_level - 1);
-} 
-void print_tree(Tree_t *tree) { //can be used for debugging
-	int n = tree->n, **adjs = tree->adj_matrix, i, j;
-
-	for (i = 0; i < n; i++)
-		for (j = 0; j < n; j++)
-			if (adjs[i][j])
-				printf("(%d, %d) ", i+1, j+1);
-
-
-}
-int find_center(Tree_t *tree, int *queue) {
-	int n = tree->n, center = -1, i, max_dist, tmp;
-	max_dist = n;
-
-
-	for (i = 0; i < n; i++) {
-		queue[0] = i;
-		tmp = max_distance(tree, queue);
-		if (tmp < max_dist) {
-			max_dist = tmp;
-			center = i;
-		}
-	}	
-
-	return(center);
-
+    int* aux = (int*)calloc(t->num_vertices,sizeof(int));
+    
+    for(int idx = 0 ; idx < t->num_vertices - 1 ;++idx){
+        int a = src[idx];
+        int b = dst[idx];
+        
+        t->neighbors[t->offset[a]+aux[a]] = b;
+        aux[a]++;
+        
+        t->neighbors[t->offset[b]+aux[b]] = a;
+        aux[b]++;
+    }
 }
 
-int main(void) {
-	Tree_t *tree;
-	int center, *queue;
+int find_center(Tree *t){
+#define ENQUEUE(x) do{ \
+    queue[tail++] = (x); \
+} while(0)
+#define DEQUEUE() (queue[head++])
+    
+    // A ideia aqui eh tirar os vertices folhas (vertices de grau 1)
+    // ate que sobre 1 ou 2 vertices (enunciado garante que sempre sobrara
+    // apenas 1).
+    int* queue = (int*) malloc((t->num_vertices+1)*sizeof(int));
+    int head=0, tail=0;
+    for(int v = 0; v < t->num_vertices ; ++v){
+        if(t->degrees[v] == 1){
+            ENQUEUE(v);
+        }
+    }
 
-	tree = read_edges(FILE_POINTER);
-	queue = (int *)malloc(sizeof(int)*tree->n);
+    int curr_num_vertices = t->num_vertices;
 
+    while(curr_num_vertices > 2){
+        int v = DEQUEUE();
+        if(t->unactive[v]) continue;
+        t->unactive[v] = true;
+        curr_num_vertices--;
 
-	center = find_center(tree, queue);
-	printf("%d\n", center+1);
+        // iterando pelos vizinhos de v
+        #pragma omp parallel for 
+        for(int offset = t->offset[v]; offset < t->offset[v+1] ;++offset){
+            int u = t->neighbors[offset];
+            // if(t->unactive[u]) continue; 
+            // eu pode pular os inativos
+            // mas no nosso caso nao vai fazer diferenca
+            t->degrees[u] --;
+            if(t->degrees[u] == 1) ENQUEUE(u);
+        }
+    }
 
+    int ans=-1;
+    #pragma omp parallel for
+    for(int v = 0 ; v < t->num_vertices ;++v){
+        if(!t->unactive[v]) ans = v;
+    }
+
+    return ans+1;
+
+#undef ENQUEUE
+#undef DEQUEUE
+}
+
+int main(int argc, const char * argv[]){
+    Tree tree;
+    int num_vertices;
+    fscanf(stdin,"%d",&num_vertices);
+    init_tree(&tree,num_vertices);
+    read_input(&tree);
+
+    int x = find_center(&tree);
+    fprintf(stdout,"%d\n",x);
+    return 0;
 }
