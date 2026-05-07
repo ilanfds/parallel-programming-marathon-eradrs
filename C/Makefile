@@ -1,12 +1,16 @@
-FLAGS=-O3
-EXEC=main
+FLAGS=-O3 -fopenmp
+
 CC=g++
 
-ALL: $(EXEC)
+RM=rm -f
+
+EXEC=main
+
+all: $(EXEC)
 
 $(EXEC):
-	$(CC) $(FLAGS) $(EXEC).cpp -c -o $(EXEC).o
-	$(CC) $(FLAGS) $(EXEC).o  -o $(EXEC)
+	$(CC) $(FLAGS) $(EXEC).cpp -o $(EXEC)
 
 clean:
-	rm -rf $(EXEC) *.o
+	$(RM) $(EXEC)
+
