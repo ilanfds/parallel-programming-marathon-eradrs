@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <cuda_runtime.h>
 
 #define N_ITER 10 // number of simulation iterations
 #define DT 0.01f // time step
@@ -10,9 +11,9 @@
 
 typedef struct { float x, y, z, vx, vy, vz; } Body;
 
-__global__  void update_positions(Body *p, float dt, int n){
-    int jump = blockDim.x * gridDim.x; 
-    int index = threadIdx.x + blockDim.x * blockIdx.x
+__global__ void update_positions(Body *p, float dt, int n){
+    int jump = blockDim.x * gridDim.x;
+    int index = threadIdx.x + blockDim.x * blockIdx.x;
 
     for (int i = index; i < n; i += jump) {
       p[i].x += dt * p[i].vx;
@@ -23,11 +24,11 @@ __global__  void update_positions(Body *p, float dt, int n){
 }
 
 __global__ void update_velocities(Body *p, float dt, int n){
-    // cada thread sera responsavel por atualizar um numero fixo de particulas 
+    // cada thread sera responsavel por atualizar um numero fixo de particulas
 
     // cada thread atualiza particulas pulando de jump em jump na lista de particulas
-    int jump = blockDim.x * gridDim.x; 
-    int index = threadIdx.x + blockDim.x * blockIdx.x
+    int jump = blockDim.x * gridDim.x;
+    int index = threadIdx.x + blockDim.x * blockIdx.x;
 
     for (int i = index; i < n; i += jump) {
       float fx = 0.0f, fy = 0.0f, fz = 0.0f;
@@ -39,7 +40,7 @@ __global__ void update_velocities(Body *p, float dt, int n){
         dz = p[j].z - p[i].z;
 
         float sqrd_dist = dx*dx + dy*dy + dz*dz + SOFTENING;
-        float inv_dist = 1 / sqrt(sqrd_dist);
+        float inv_dist = 1.0 / sqrt((double)sqrd_dist);
         float inv_dist3 = inv_dist * inv_dist * inv_dist;
 
         fx += dx * inv_dist3;
@@ -47,8 +48,8 @@ __global__ void update_velocities(Body *p, float dt, int n){
         fz += dz * inv_dist3;
       }
 
-      p[i].vx += dt*fx; 
-      p[i].vy += dt*fy; 
+      p[i].vx += dt*fx;
+      p[i].vy += dt*fy;
       p[i].vz += dt*fz;
 
     }
@@ -78,28 +79,29 @@ void write_dataset(const int nbodies, Body *bodies) {
   }
 }
 
-int main(int argc,char **argv) {
+int main(int argc, char **argv) {
   int nbodies;
+  Body *h_bodies = read_dataset(&nbodies);
 
-  Body *bodies = read_dataset(&nbodies);
+  size_t bytes = nbodies * sizeof(Body);
 
-  /*
-   * At each simulation iteration, interbody forces are computed,
-   * and bodies' positions are integrated.
-   */
+  Body *d_bodies;
+  cudaMalloc(&d_bodies, bytes);
+  cudaMemcpy(d_bodies, h_bodies, bytes, cudaMemcpyHostToDevice);
+
+  int block_size = 256;
+  int grid_size = (nbodies + block_size - 1) / block_size;
+
   for (int iter = 0; iter < N_ITER; iter++) {
-    body_force(bodies, DT, nbodies);
-
-    for (int i = 0; i < nbodies; i++) {
-      bodies[i].x += bodies[i].vx * DT;
-      bodies[i].y += bodies[i].vy * DT;
-      bodies[i].z += bodies[i].vz * DT;
-    }
+    update_velocities<<<grid_size, block_size>>>(d_bodies, DT, nbodies);
+    update_positions<<<grid_size, block_size>>>(d_bodies, DT, nbodies);
   }
 
-  write_dataset(nbodies, bodies);
+  cudaMemcpy(h_bodies, d_bodies, bytes, cudaMemcpyDeviceToHost);
+  cudaFree(d_bodies);
 
-  free(bodies);
-  
-  exit(EXIT_SUCCESS);
+  write_dataset(nbodies, h_bodies);
+  free(h_bodies);
+
+  return 0;
 }
