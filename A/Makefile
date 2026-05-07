@@ -1,21 +1,17 @@
-COMPILER=gcc
+CC=nvcc
 
-# Flags
-CFLAGS=-O3 -Wall -std=gnu11 -lm
+# Flags: -arch=sm_70 alvo a Tesla V100 do julgamento
+FLAGS=-O3 -arch=sm_70 --fmad=false
 
 # Files to compile
-OBJECTS=nbody.c
+SRC=a.cu
 
 # Executable name
-EXE=nbody
+EXE=a
 
 
-all: $(OBJECTS)
-	$(COMPILER) $(OBJECTS) $(CFLAGS) -o $(EXE)
-
-run:
-	./$(EXE)
+all: $(SRC)
+	$(CC) $(FLAGS) $(SRC) -o $(EXE)
 
 clean:
-	rm $(EXE)
-
+	rm -f $(EXE)
