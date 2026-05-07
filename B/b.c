@@ -113,12 +113,13 @@ int find_center(Tree *t){
         }
     }
 
+    int ans=-1;
     #pragma omp parallel for
     for(int v = 0 ; v < t->num_vertices ;++v){
-        if(!t->unactive[v]) return v
+        if(!t->unactive[v]) ans = v;
     }
 
-    return -1;
+    return ans;
 
 #undef ENQUEUE
 #undef DEQUEUE
