@@ -29,22 +29,6 @@ typedef struct{
     bool* unactive;
 } Tree;
 
-void printTree(Tree t){
-    printf("Tree:{\n");
-    printf("\tnum_vertices = %d\n",t.num_vertices);
-    int max = (10 < t.num_vertices-1) ? 10 : t.num_vertices-1;
-    printf("\toffset = [");
-    for(int i = 0 ; i<max ; ++i ) printf("%d,",t.offset[i]);
-    printf("]\n");
-    printf("\tneighbors = [");
-    for(int i = 0 ; i<max ; ++i ) printf("%d,",t.neighbors[i]);
-    printf("]\n");
-    printf("\tdegrees = [");
-    for(int i = 0 ; i<max ; ++i ) printf("%d,",t.degrees[i]);
-    printf("]\n");
-    printf("}\n");
-}
-
 void init_tree(Tree *t,int num_vertices){
     int num_arestas = num_vertices-1;
     t->num_vertices = num_vertices;
@@ -65,7 +49,7 @@ void read_input(Tree *t){
         int idx = 0;
         for(;;){
             if(fscanf(stdin, "%d %d", &a, &b)!=2) break;
-            a--; b--; // need 0 indexed vertices
+            a--; b--; // precisamos de 0-indexed
             src[idx] = a;
             dst[idx] = b;
             idx++;
@@ -92,6 +76,46 @@ void read_input(Tree *t){
     }
 }
 
+int find_center(Tree *t){
+#define ENQUEUE(x) do{ \
+    queue[tail++] = (x); \
+} while(0)
+#define DEQUEUE() (queue[head++])
+    
+    // A ideia aqui eh tirar os vertices folhas (vertices de grau 1)
+    // ate que sobre 1 ou 2 vertices (enunciado garante que sempre sobrara
+    // apenas 1).
+    int* queue = (int*) malloc((t->num_vertices+1)*sizeof(int));
+    int head=0, tail=0;
+    for(int v ; v < t->num_vertices ; ++v){
+        if(t->degrees[v] == 1){
+            ENQUEUE(v);
+        }
+    }
+
+    int curr_num_vertices = t->num_vertices;
+
+    while(curr_num_vertices > 2){
+        int v = DEQUEUE();
+        if(t->unactive[v]) continue;
+        t->unactive[v] = true;
+
+        // iterando pelos vizinhos de v
+        for(int offset = t->offset[v]; offset < t->offset[v+1] ;++offset){
+            int u = t->neighbors[offset];
+            // if(t->unactive[u]) continue; 
+            // eu pode pular os inativos
+            // mas no nosso caso nao vai fazer diferenca
+            t->degrees[u] --;
+        }
+    }
+
+
+
+#undef ENQUEUE
+#undef DEQUEUE
+}
+
 int main(int argc, const char * argv[]){
     Tree tree;
     int num_vertices;
@@ -99,8 +123,7 @@ int main(int argc, const char * argv[]){
     init_tree(&tree,num_vertices);
     read_input(&tree);
 
-    printTree(tree);
-
-
+    int x = find_center(&tree);
+    fprintf(stdout,"%d",x);
     return 0;
 }
