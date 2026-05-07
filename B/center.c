@@ -91,7 +91,7 @@ int find_center(Tree *t){
         // coloca todas as folhas no buffer
         #pragma omp parallel for
         for(int v = 0 ; v < t->num_vertices ; ++v){
-            if(!t->unactive && t->degrees[v] == 1){
+            if(!t->unactive[v] && t->degrees[v] == 1){
                 int idx;
                 #pragma omp atomic capture
                 idx = num_leaves++;
@@ -122,7 +122,7 @@ int find_center(Tree *t){
     }
 
     free(curr_leaves);
-    
+
     int ans=-1;
     #pragma omp parallel for
     for(int v = 0 ; v < t->num_vertices ;++v){
