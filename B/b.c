@@ -43,8 +43,8 @@ void init_tree(Tree *t,int num_vertices){
 
 void read_input(Tree *t){
     int a,b;
-    int* src = (int*)calloc(t->num_vertices,sizeof(int));
-    int* dst = (int*)calloc(t->num_vertices,sizeof(int));
+    int* src = (int*)calloc(t->num_vertices-1,sizeof(int));
+    int* dst = (int*)calloc(t->num_vertices-1,sizeof(int));
     {
         int idx = 0;
         for(;;){
@@ -87,7 +87,7 @@ int find_center(Tree *t){
     // apenas 1).
     int* queue = (int*) malloc((t->num_vertices+1)*sizeof(int));
     int head=0, tail=0;
-    for(int v ; v < t->num_vertices ; ++v){
+    for(int v = 0; v < t->num_vertices ; ++v){
         if(t->degrees[v] == 1){
             ENQUEUE(v);
         }
@@ -119,7 +119,7 @@ int find_center(Tree *t){
         if(!t->unactive[v]) ans = v;
     }
 
-    return ans;
+    return ans+1;
 
 #undef ENQUEUE
 #undef DEQUEUE
@@ -133,6 +133,6 @@ int main(int argc, const char * argv[]){
     read_input(&tree);
 
     int x = find_center(&tree);
-    fprintf(stdout,"%d",x);
+    fprintf(stdout,"%d\n",x);
     return 0;
 }
