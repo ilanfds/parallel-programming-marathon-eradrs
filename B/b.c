@@ -99,18 +99,26 @@ int find_center(Tree *t){
         int v = DEQUEUE();
         if(t->unactive[v]) continue;
         t->unactive[v] = true;
+        curr_num_vertices--;
 
         // iterando pelos vizinhos de v
+        #pragma omp parallel for
         for(int offset = t->offset[v]; offset < t->offset[v+1] ;++offset){
             int u = t->neighbors[offset];
             // if(t->unactive[u]) continue; 
             // eu pode pular os inativos
             // mas no nosso caso nao vai fazer diferenca
             t->degrees[u] --;
+            if(t->degrees[u] == 1) ENQUEUE(u);
         }
     }
 
+    #pragma omp parallel for
+    for(int v = 0 ; v < t->num_vertices ;++v){
+        if(!t->unactive[v]) return v
+    }
 
+    return -1;
 
 #undef ENQUEUE
 #undef DEQUEUE
