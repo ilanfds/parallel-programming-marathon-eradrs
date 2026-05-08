@@ -5,6 +5,8 @@ Testes/
 
 # Binarios compilados
 A/nbody
+A/a
+A/nbody_1body
 B/center
 C/main
 Testes/matmul
@@ -12,6 +14,23 @@ Testes/matmul
 # Objetos
 *.o
 *.obj
+
+# PDFs duplicados nas subpastas (problemset.pdf fica so na raiz)
+A/problemset.pdf
+B/problemset.pdf
+C/problemset.pdf
+
+# Inputs de teste e geradores (auxiliares de desenvolvimento)
+A/input
+B/ex01.in
+B/ex02.in
+B/generator.py
+C/generate.py
+C/input.txt
+
+# Versoes antigas/auxiliares
+C/main.c
+C/originalmain.cpp
 
 # Outputs de simulacao
 *.out
