@@ -1,5 +1,8 @@
 *.zip
 
+# Pasta de testes/aprendizado, nao deve ir pro repo
+Testes/
+
 # Binarios compilados
 A/nbody
 B/center
